@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PostStream — LinkedIn Automation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --ink: #0a0a0f;
+      --ink-soft: #1c1c2e;
+      --surface: #f5f4f0;
+      --surface-raised: #ffffff;
+      --accent: #0077B5;
+      --accent-deep: #005885;
+      --accent-glow: rgba(0, 119, 181, 0.15);
+      --warm: #ff6b35;
+      --warm-soft: rgba(255, 107, 53, 0.1);
+      --border: rgba(10, 10, 15, 0.1);
+      --border-focus: rgba(0, 119, 181, 0.5);
+      --text-muted: #6b7280;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--surface);
+      color: var(--ink);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    h1, h2, h3, .font-display { font-family: 'Syne', sans-serif; }
+
+    /* ── Background grid ── */
+    .bg-grid {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image:
+        linear-gradient(rgba(10,10,15,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(10,10,15,0.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+
+    .bg-blob {
+      position: fixed; border-radius: 50%; filter: blur(80px); pointer-events: none; z-index: 0;
+    }
+    .blob-1 {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(0,119,181,0.08) 0%, transparent 70%);
+      top: -200px; right: -200px;
+    }
+    .blob-2 {
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(255,107,53,0.06) 0%, transparent 70%);
+      bottom: 100px; left: -100px;
+    }
+
+    /* ── Layout ── */
+    .app-wrapper {
+      position: relative; z-index: 1;
+      max-width: 680px; margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ── Header ── */
+    .site-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 32px 0 40px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 48px;
+    }
+
+    .logo-mark {
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: var(--ink);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      position: relative; overflow: hidden;
+    }
+
+    .logo-icon::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--ink) 100%);
+    }
+
+    .logo-icon svg { position: relative; z-index: 1; }
+
+    .logo-text {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+
+    .logo-text span { color: var(--accent); }
+
+    /* ── Status pill ── */
+    .status-pill {
+      display: flex; align-items: center; gap-7;
+      padding: 6px 14px 6px 10px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      cursor: default;
+    }
+
+    .status-pill.disconnected {
+      background: var(--warm-soft);
+      color: var(--warm);
+      border: 1px solid rgba(255,107,53,0.2);
+    }
+
+    .status-pill.connected {
+      background: rgba(34,197,94,0.1);
+      color: #16a34a;
+      border: 1px solid rgba(34,197,94,0.2);
+    }
+
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      display: inline-block; margin-right: 6px;
+    }
+
+    .disconnected .status-dot { background: var(--warm); animation: pulse-warm 2s infinite; }
+    .connected .status-dot { background: #16a34a; animation: pulse-green 2s infinite; }
+
+    @keyframes pulse-warm {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.85); }
+    }
+    @keyframes pulse-green {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    /* ── Hero section ── */
+    .hero {
+      margin-bottom: 40px;
+    }
+
+    .hero-eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+
+    .hero-eyebrow::before {
+      content: '';
+      width: 20px; height: 1.5px;
+      background: var(--accent);
+      display: block;
+    }
+
+    .hero h1 {
+      font-size: clamp(32px, 5vw, 48px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+      margin-bottom: 16px;
+    }
+
+    .hero h1 em {
+      font-style: normal;
+      color: var(--accent);
+      position: relative;
+    }
+
+    .hero p {
+      font-size: 16px;
+      line-height: 1.65;
+      color: var(--text-muted);
+      max-width: 480px;
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface-raised);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px;
+      margin-bottom: 16px;
+      transition: box-shadow 0.2s ease;
+    }
+
+    .card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+
+    .card-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .card-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; flex-shrink: 0;
+    }
+
+    .card-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 15px; font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .card-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+
+    .step-number {
+      font-family: 'Syne', sans-serif;
+      font-size: 11px; font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      background: rgba(10,10,15,0.05);
+      padding: 2px 8px;
+      border-radius: 100px;
+      margin-left: auto;
+    }
+
+    /* ── Connect button ── */
+    .btn-linkedin {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%;
+      padding: 14px 24px;
+      background: var(--accent);
+      color: white;
+      font-family: 'Syne', sans-serif;
+      font-size: 15px; font-weight: 700;
+      letter-spacing: -0.01em;
+      border: none; border-radius: 12px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      position: relative; overflow: hidden;
+    }
+
+    .btn-linkedin::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent);
+      opacity: 0; transition: opacity 0.2s;
+    }
+
+    .btn-linkedin:hover { background: var(--accent-deep); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,119,181,0.3); }
+    .btn-linkedin:hover::before { opacity: 1; }
+    .btn-linkedin:active { transform: translateY(0); }
+
+    .btn-logout {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px;
+      background: transparent;
+      color: #ef4444;
+      font-size: 13px; font-weight: 500;
+      border: 1px solid rgba(239,68,68,0.2);
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-logout:hover { background: rgba(239,68,68,0.06); }
+
+    /* ── User info strip ── */
+    .user-strip {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px;
+      background: rgba(0,119,181,0.04);
+      border: 1px solid rgba(0,119,181,0.12);
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    .user-avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: var(--accent);
+      object-fit: cover;
+      border: 2px solid rgba(0,119,181,0.2);
+      flex-shrink: 0;
+    }
+
+    .user-avatar-placeholder {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-weight: 700; font-size: 15px;
+      flex-shrink: 0;
+    }
+
+    .user-name { font-weight: 600; font-size: 14px; }
+    .user-email { font-size: 12px; color: var(--text-muted); }
+
+    /* ── Form ── */
+    .form-group { margin-bottom: 20px; }
+
+    label {
+      display: block;
+      font-size: 13px; font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+
+    label .optional {
+      font-weight: 400; color: var(--text-muted);
+      font-size: 11px; margin-left: 4px;
+    }
+
+    textarea, input[type="text"], input[type="number"] {
+      width: 100%;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: var(--ink);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      resize: none;
+      outline: none;
+    }
+
+    textarea:focus, input[type="text"]:focus, input[type="number"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    textarea::placeholder, input::placeholder { color: #adb5bd; }
+
+    .char-count {
+      font-size: 11px; color: var(--text-muted);
+      text-align: right; margin-top: 6px;
+    }
+
+    .char-count.warn { color: var(--warm); }
+    .char-count.error { color: #ef4444; }
+
+    /* ── Image drop zone ── */
+    .drop-zone {
+      position: relative;
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 32px 20px;
+      text-align: center;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      background: var(--surface);
+    }
+
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-glow);
+    }
+
+    .drop-zone input[type="file"] {
+      position: absolute; inset: 0;
+      opacity: 0; cursor: pointer;
+      width: 100%; height: 100%;
+    }
+
+    .drop-icon { font-size: 28px; margin-bottom: 8px; }
+    .drop-text { font-size: 14px; color: var(--ink); font-weight: 500; }
+    .drop-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+    .image-preview-wrap {
+      position: relative; display: inline-block;
+      margin-top: 12px;
+    }
+
+    .image-preview {
+      max-height: 180px; border-radius: 10px;
+      object-fit: cover; display: block;
+      border: 1.5px solid var(--border);
+    }
+
+    .preview-remove {
+      position: absolute; top: -8px; right: -8px;
+      width: 22px; height: 22px;
+      background: #ef4444; color: white;
+      border-radius: 50%; border: none;
+      font-size: 12px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700;
+      transition: transform 0.15s;
+    }
+
+    .preview-remove:hover { transform: scale(1.1); }
+
+    /* ── Submit button ── */
+    .btn-submit {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%;
+      padding: 15px 24px;
+      background: var(--ink);
+      color: white;
+      font-family: 'Syne', sans-serif;
+      font-size: 15px; font-weight: 700;
+      letter-spacing: -0.01em;
+      border: none; border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative; overflow: hidden;
+    }
+
+    .btn-submit:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(10,10,15,0.25);
+    }
+
+    .btn-submit:active:not(:disabled) { transform: translateY(0); }
+
+    .btn-submit:disabled {
+      opacity: 0.5; cursor: not-allowed;
+    }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2.5px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Alert ── */
+    .alert {
+      padding: 14px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      display: none;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 16px;
+      animation: slideDown 0.3s ease;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .alert.show { display: flex; }
+
+    .alert-success {
+      background: rgba(34,197,94,0.08);
+      border: 1px solid rgba(34,197,94,0.2);
+      color: #15803d;
+    }
+
+    .alert-error {
+      background: rgba(239,68,68,0.07);
+      border: 1px solid rgba(239,68,68,0.2);
+      color: #b91c1c;
+    }
+
+    .alert-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+
+    /* ── Divider ── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 24px 0;
+    }
+
+    /* ── Scheduling row ── */
+    .schedule-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    }
+
+    .badge-future {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px;
+      background: rgba(255,107,53,0.1);
+      color: var(--warm);
+      border-radius: 100px;
+      font-size: 11px; font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    /* ── Animations ── */
+    .fade-in {
+      animation: fadeIn 0.4s ease both;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="bg-blob blob-1"></div>
+<div class="bg-blob blob-2"></div>
+
+<div class="app-wrapper">
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="logo-mark">
+      <div class="logo-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M3 9L7 13L15 5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="logo-text">Post<span>Stream</span></span>
+    </div>
+
+    <div id="statusPill" class="status-pill disconnected">
+      <span class="status-dot"></span>
+      <span id="statusText">Not connected</span>
+    </div>
+  </header>
+
+  <!-- Alert -->
+  <div id="alert" class="alert" role="alert">
+    <span class="alert-icon" id="alertIcon"></span>
+    <span id="alertMsg"></span>
+  </div>
+
+  <!-- Hero -->
+  <div class="hero fade-in">
+    <div class="hero-eyebrow">LinkedIn Automation</div>
+    <h1>Publish posts with<br /><em>one click.</em></h1>
+    <p>Connect your LinkedIn account and share content — with images — directly from PostStream. No more copy-pasting.</p>
+  </div>
+
+  <!-- Step 1: Connect LinkedIn -->
+  <div class="card fade-in" id="connectCard" style="animation-delay:0.05s">
+    <div class="card-header">
+      <div class="card-icon" style="background:rgba(0,119,181,0.08)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="#0077B5">
+          <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/>
+        </svg>
+      </div>
+      <div>
+        <div class="card-title">LinkedIn Account</div>
+        <div class="card-subtitle">Authenticate to enable posting</div>
+      </div>
+      <span class="step-number">01</span>
+    </div>
+
+    <!-- Disconnected state -->
+    <div id="connectSection">
+      <a href="/auth/linkedin" class="btn-linkedin">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+          <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/>
+        </svg>
+        Connect LinkedIn Account
+      </a>
+    </div>
+
+    <!-- Connected state -->
+    <div id="connectedSection" class="hidden">
+      <div class="user-strip" id="userStrip">
+        <div class="user-avatar-placeholder" id="userInitial">?</div>
+        <div>
+          <div class="user-name" id="userName">Loading…</div>
+          <div class="user-email" id="userEmail"></div>
+        </div>
+        <a href="/auth/logout" class="btn-logout" style="margin-left:auto">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          Disconnect
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Post Form -->
+  <div class="card fade-in" id="postCard" style="animation-delay:0.1s">
+    <div class="card-header">
+      <div class="card-icon" style="background:rgba(10,10,15,0.05)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2.2">
+          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="card-title">Compose Post</div>
+        <div class="card-subtitle">Write your content and attach media</div>
+      </div>
+      <span class="step-number">02</span>
+    </div>
+
+    <form id="postForm" enctype="multipart/form-data">
+      <!-- Content textarea -->
+      <div class="form-group">
+        <label for="content">Post Content</label>
+        <textarea
+          id="content"
+          name="content"
+          rows="5"
+          maxlength="3000"
+          placeholder="What's on your mind? Share an insight, announcement, or story…"
+        ></textarea>
+        <div class="char-count"><span id="charCount">0</span> / 3000</div>
+      </div>
+
+      <!-- Image upload -->
+      <div class="form-group">
+        <label for="image">Image <span class="optional">optional</span></label>
+        <div class="drop-zone" id="dropZone">
+          <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/gif,image/webp" />
+          <div id="dropPrompt">
+            <div class="drop-icon">🖼️</div>
+            <div class="drop-text">Drop image here or click to browse</div>
+            <div class="drop-sub">JPEG, PNG, GIF, WEBP · Max 5 MB</div>
+          </div>
+          <div id="imagePreviewContainer" class="hidden" style="pointer-events:none">
+            <div class="image-preview-wrap">
+              <img id="imagePreview" class="image-preview" src="" alt="Preview" />
+              <button type="button" class="preview-remove" id="removeImage" style="pointer-events:all">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Scheduling (UI only — future feature) -->
+      <div class="form-group">
+        <label>
+          Schedule
+          <span class="badge-future">Coming soon</span>
+        </label>
+        <div class="schedule-row">
+          <div>
+            <input type="number" id="delayDays" name="delayDays" placeholder="Delay (days)" min="0" max="90" disabled style="opacity:0.45;cursor:not-allowed" />
+          </div>
+          <div>
+            <input type="text" id="postTime" name="postTime" placeholder="Time e.g. 09:00 AM" disabled style="opacity:0.45;cursor:not-allowed" />
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:8px">Scheduling will be enabled in a future update. Posts are published immediately.</div>
+      </div>
+
+      <!-- Submit -->
+      <button type="submit" class="btn-submit" id="submitBtn" disabled>
+        <span id="submitLabel">Connect LinkedIn to post</span>
+      </button>
+    </form>
+  </div>
+
+  <!-- Footer -->
+  <p style="text-align:center;font-size:12px;color:var(--text-muted);margin-top:32px">
+    PostStream uses LinkedIn's official API &amp; OAuth 2.0. Your credentials are never stored.
+  </p>
+
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  let isConnected = false;
+  let selectedFile = null;
+
+  // ── URL param helpers ──────────────────────────────────────────────────────
+  const params = new URLSearchParams(window.location.search);
+
+  if (params.get('connected') === 'true') {
+    showAlert('success', '🎉 LinkedIn connected! You\'re ready to post.');
+    history.replaceState({}, '', '/');
+  }
+
+  if (params.get('error')) {
+    showAlert('error', '⚠️ ' + decodeURIComponent(params.get('error')));
+    history.replaceState({}, '', '/');
+  }
+
+  // ── Check auth state on load ───────────────────────────────────────────────
+  async function checkAuth() {
+    try {
+      const res = await fetch('/api/me', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setConnected(data.user);
+      } else {
+        setDisconnected();
+      }
+    } catch {
+      setDisconnected();
+    }
+  }
+
+  function setConnected(user) {
+    isConnected = true;
+
+    // Update status pill
+    const pill = document.getElementById('statusPill');
+    pill.className = 'status-pill connected';
+    document.getElementById('statusText').textContent = 'Connected';
+
+    // Show user info
+    document.getElementById('connectSection').classList.add('hidden');
+    document.getElementById('connectedSection').classList.remove('hidden');
+    document.getElementById('userName').textContent = user.name || 'LinkedIn User';
+    document.getElementById('userEmail').textContent = user.email || '';
+
+    const initial = (user.name || 'L')[0].toUpperCase();
+    const avatarEl = document.getElementById('userInitial');
+
+    if (user.picture) {
+      const img = document.createElement('img');
+      img.src = user.picture;
+      img.alt = user.name;
+      img.className = 'user-avatar';
+      avatarEl.replaceWith(img);
+    } else {
+      avatarEl.textContent = initial;
+    }
+
+    // Enable submit
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = false;
+    document.getElementById('submitLabel').textContent = 'Publish to LinkedIn';
+  }
+
+  function setDisconnected() {
+    isConnected = false;
+    document.getElementById('statusPill').className = 'status-pill disconnected';
+    document.getElementById('statusText').textContent = 'Not connected';
+    document.getElementById('connectSection').classList.remove('hidden');
+    document.getElementById('connectedSection').classList.add('hidden');
+    document.getElementById('submitBtn').disabled = true;
+    document.getElementById('submitLabel').textContent = 'Connect LinkedIn to post';
+  }
+
+  // ── Character counter ──────────────────────────────────────────────────────
+  const textarea = document.getElementById('content');
+  const charCount = document.getElementById('charCount');
+
+  textarea.addEventListener('input', () => {
+    const len = textarea.value.length;
+    charCount.textContent = len;
+    charCount.parentElement.className = 'char-count' +
+      (len > 2800 ? ' error' : len > 2500 ? ' warn' : '');
+  });
+
+  // ── Image upload / drag-drop ───────────────────────────────────────────────
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('image');
+  const dropPrompt = document.getElementById('dropPrompt');
+  const previewContainer = document.getElementById('imagePreviewContainer');
+  const previewImg = document.getElementById('imagePreview');
+  const removeBtn = document.getElementById('removeImage');
+
+  ['dragover', 'dragenter'].forEach(ev =>
+    dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('drag-over'); })
+  );
+  ['dragleave', 'drop'].forEach(ev =>
+    dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.remove('drag-over'); })
+  );
+
+  dropZone.addEventListener('drop', e => {
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) handleFileSelect(fileInput.files[0]);
+  });
+
+  function handleFileSelect(file) {
+    if (!file.type.startsWith('image/')) {
+      showAlert('error', 'Only image files are accepted.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showAlert('error', 'Image exceeds 5 MB limit.');
+      return;
+    }
+    selectedFile = file;
+    const reader = new FileReader();
+    reader.onload = e => {
+      previewImg.src = e.target.result;
+      dropPrompt.classList.add('hidden');
+      previewContainer.classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  removeBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    selectedFile = null;
+    fileInput.value = '';
+    previewImg.src = '';
+    dropPrompt.classList.remove('hidden');
+    previewContainer.classList.add('hidden');
+  });
+
+  // ── Form submission ────────────────────────────────────────────────────────
+  document.getElementById('postForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!isConnected) return;
+
+    const content = textarea.value.trim();
+    if (!content) {
+      showAlert('error', 'Please write something before posting.');
+      return;
+    }
+
+    const btn = document.getElementById('submitBtn');
+    const label = document.getElementById('submitLabel');
+
+    btn.disabled = true;
+    label.innerHTML = '';
+    const spinner = document.createElement('div');
+    spinner.className = 'spinner';
+    const txt = document.createTextNode('Publishing…');
+    btn.appendChild(spinner);
+    btn.appendChild(txt);
+
+    try {
+      const formData = new FormData();
+      formData.append('content', content);
+      if (selectedFile) formData.append('image', selectedFile);
+
+      const res = await fetch('/api/post', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        showAlert('success', '✅ Post published successfully to LinkedIn!');
+        textarea.value = '';
+        charCount.textContent = '0';
+        removeBtn.click();
+      } else {
+        showAlert('error', '❌ ' + (data.error || 'Failed to publish post.'));
+      }
+    } catch (err) {
+      showAlert('error', '❌ Network error. Please try again.');
+    } finally {
+      btn.removeChild(btn.querySelector('.spinner'));
+      btn.removeChild(btn.lastChild);
+      label.textContent = 'Publish to LinkedIn';
+      btn.disabled = false;
+    }
+  });
+
+  // ── Alert helper ──────────────────────────────────────────────────────────
+  function showAlert(type, message) {
+    const el = document.getElementById('alert');
+    el.className = `alert alert-${type} show`;
+    document.getElementById('alertMsg').textContent = message;
+    document.getElementById('alertIcon').textContent = type === 'success' ? '✓' : '!';
+
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => {
+      el.classList.remove('show');
+    }, 6000);
+
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  checkAuth();
+</script>
+
+</body>
+</html>
